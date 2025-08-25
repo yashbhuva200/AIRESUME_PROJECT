@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'resume_preview_screen.dart';
 
 class ResumeFormScreen extends StatefulWidget {
   final String? resumeId;
@@ -13,230 +14,459 @@ class ResumeFormScreen extends StatefulWidget {
 class _ResumeFormScreenState extends State<ResumeFormScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
+  final _formKey = GlobalKey<FormState>();
 
-  // Controllers for the main form fields
+  // Controllers
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _locationController = TextEditingController();
   final _summaryController = TextEditingController();
   final _skillsController = TextEditingController();
 
-  // Data models for dynamic forms
-  List<Map<String, String>> _educationDetails = [];
-  List<Map<String, String>> _experienceDetails = [];
-  List<Map<String, String>> _projectDetails = [];
-
-  Map<String, dynamic> _resumeData = {
-    'contact': {},
-    'education': [],
-    'summary': '',
-    'experience': [],
-    'skills': [],
-    'projects': [],
-  };
+  // Data models
+  List<Map<String, dynamic>> _educationDetails = [];
+  List<Map<String, dynamic>> _experienceDetails = [];
+  List<Map<String, dynamic>> _projectDetails = [];
 
   final _firestore = FirebaseFirestore.instance;
   final _userId = FirebaseAuth.instance.currentUser!.uid;
   bool _isLoading = true;
+  bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
+    _initializeData();
+  }
+
+  void _initializeData() {
     if (widget.resumeId != null) {
       _fetchResumeData(widget.resumeId!);
     } else {
-      setState(() {
-        _isLoading = false;
-      });
-      print('Starting new, blank resume.');
+      setState(() => _isLoading = false);
     }
-    _nameController.addListener(_updatePreview);
-    _emailController.addListener(_updatePreview);
-    _phoneController.addListener(_updatePreview);
-    _summaryController.addListener(_updatePreview);
-    _skillsController.addListener(_updatePreview);
   }
 
-  void _updatePreview() {
-    setState(() {
-      _resumeData['contact']['name'] = _nameController.text;
-      _resumeData['contact']['email'] = _emailController.text;
-      _resumeData['contact']['phone'] = _phoneController.text;
-      _resumeData['summary'] = _summaryController.text;
-      _resumeData['skills'] = _skillsController.text.split(',').map((e) => e.trim()).toList();
-    });
-  }
-
-  void _fetchResumeData(String resumeId) async {
-    final docRef = _firestore.collection('users').doc(_userId).collection('resumes').doc(resumeId);
+  Future<void> _fetchResumeData(String resumeId) async {
     try {
-      final snapshot = await docRef.get();
-      if (snapshot.exists && snapshot.data() != null) {
-        final data = snapshot.data();
-        _resumeData = data!;
-        _nameController.text = data['contact']['name'] ?? '';
-        _emailController.text = data['contact']['email'] ?? '';
-        _phoneController.text = data['contact']['phone'] ?? '';
-        _summaryController.text = data['summary'] ?? '';
-        _skillsController.text = (data['skills'] as List<dynamic>?)?.join(', ') ?? '';
-        _educationDetails = (data['education'] as List<dynamic>?)?.cast<Map<String, String>>() ?? [];
-        _experienceDetails = (data['experience'] as List<dynamic>?)?.cast<Map<String, String>>() ?? [];
-        _projectDetails = (data['projects'] as List<dynamic>?)?.cast<Map<String, String>>() ?? [];
-      } else {
-        print('Resume with ID $resumeId not found.');
+      final doc = await _firestore
+          .collection('users')
+          .doc(_userId)
+          .collection('resumes')
+          .doc(resumeId)
+          .get();
+
+      if (doc.exists) {
+        final data = doc.data()!;
+
+        // Clear existing data first
+        _nameController.clear();
+        _emailController.clear();
+        _phoneController.clear();
+        _summaryController.clear();
+        _skillsController.clear();
+
+        // Populate contact information
+        if (data['contact'] != null) {
+          final contact = data['contact'] as Map<String, dynamic>;
+          _nameController.text = contact['name']?.toString() ?? '';
+          _emailController.text = contact['email']?.toString() ?? '';
+          _phoneController.text = contact['phone']?.toString() ?? '';
+          _locationController.text = contact['location']?.toString() ?? '';
+        }
+
+        // Populate other fields
+        _summaryController.text = data['summary']?.toString() ?? '';
+
+        // Handle skills list properly
+        if (data['skills'] != null) {
+          final skills = data['skills'] as List;
+          if (skills.isNotEmpty) {
+            _skillsController.text = skills.map((s) => s.toString()).join(', ');
+          }
+        }
+
+        // Handle education details
+        if (data['education'] != null) {
+          final education = data['education'] as List;
+          _educationDetails = education.map((item) {
+            if (item is Map<String, dynamic>) {
+              return Map<String, dynamic>.from(item);
+            }
+            return <String, dynamic>{};
+          }).toList();
+        } else {
+          _educationDetails = [];
+        }
+
+        // Handle experience details
+        if (data['experience'] != null) {
+          final experience = data['experience'] as List;
+          _experienceDetails = experience.map((item) {
+            if (item is Map<String, dynamic>) {
+              return Map<String, dynamic>.from(item);
+            }
+            return <String, dynamic>{};
+          }).toList();
+        } else {
+          _experienceDetails = [];
+        }
+
+        // Handle project details
+        if (data['projects'] != null) {
+          final projects = data['projects'] as List;
+          _projectDetails = projects.map((item) {
+            if (item is Map<String, dynamic>) {
+              return Map<String, dynamic>.from(item);
+            }
+            return <String, dynamic>{};
+          }).toList();
+        } else {
+          _projectDetails = [];
+        }
+
+        setState(() {});
       }
     } catch (e) {
-      print('Error fetching resume: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading resume: ${e.toString()}')),
+      );
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
 
   Future<void> _saveResume() async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Saving resume...')),
-    );
-    try {
-      final docRef = widget.resumeId != null
-          ? _firestore.collection('users').doc(_userId).collection('resumes').doc(widget.resumeId)
-          : _firestore.collection('users').doc(_userId).collection('resumes').doc();
+    if (!_formKey.currentState!.validate()) return;
 
-      _resumeData['last_edited'] = Timestamp.now();
-      _resumeData['education'] = _educationDetails;
-      _resumeData['experience'] = _experienceDetails;
-      _resumeData['projects'] = _projectDetails;
-      await docRef.set(_resumeData, SetOptions(merge: true));
+    setState(() => _isSaving = true);
+
+    try {
+      final resumeData = {
+        'contact': {
+          'name': _nameController.text,
+          'email': _emailController.text,
+          'phone': _phoneController.text,
+          'location': _locationController.text,
+        },
+        'summary': _summaryController.text,
+        'skills': _skillsController.text
+            .split(',')
+            .map((s) => s.trim())
+            .toList(),
+        'education': _educationDetails,
+        'experience': _experienceDetails,
+        'projects': _projectDetails,
+        'last_edited': FieldValue.serverTimestamp(),
+      };
+
+      final docRef = widget.resumeId != null
+          ? _firestore
+                .collection('users')
+                .doc(_userId)
+                .collection('resumes')
+                .doc(widget.resumeId)
+          : _firestore
+                .collection('users')
+                .doc(_userId)
+                .collection('resumes')
+                .doc();
+
+      await docRef.set(resumeData);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Resume saved successfully!')),
       );
+
+      // Navigate to preview screen
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => ResumePreviewScreen(
+              resumeId: docRef.id,
+              resumeData: resumeData,
+            ),
+          ),
+        );
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save resume: $e')),
+        SnackBar(content: Text('Failed to save: ${e.toString()}')),
       );
+    } finally {
+      setState(() => _isSaving = false);
     }
   }
 
   @override
   void dispose() {
-    _pageController.dispose();
     _nameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
+    _locationController.dispose();
     _summaryController.dispose();
     _skillsController.dispose();
+    _pageController.dispose();
     super.dispose();
-  }
-
-  Widget _buildNextButton() {
-    return ElevatedButton(
-      onPressed: () {
-        if (_currentPage < 5) {
-          _pageController.nextPage(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeIn,
-          );
-        } else {
-          _saveResume();
-        }
-      },
-      child: Text(_currentPage < 5 ? 'Next' : 'Finish & Save'),
-    );
-  }
-
-  Widget _buildAddButton(VoidCallback onPressed) {
-    return IconButton(
-      icon: const Icon(Icons.add_circle, color: Colors.blue),
-      onPressed: onPressed,
-    );
-  }
-
-  Widget _buildRemoveButton(VoidCallback onPressed) {
-    return IconButton(
-      icon: const Icon(Icons.remove_circle, color: Colors.red),
-      onPressed: onPressed,
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      return Scaffold(
+        appBar: AppBar(title: const Text('Loading...')),
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Resume Builder'),
+        title: const Text('Build Your Resume'),
+        backgroundColor: const Color(0xFF667eea),
+        foregroundColor: Colors.white,
+        elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.save),
-            onPressed: _saveResume,
+            onPressed: _isSaving ? null : _saveResume,
           ),
         ],
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          if (constraints.maxWidth > 800) {
-            return Row(
-              children: [
-                Expanded(
-                  child: _buildFormSection(),
-                ),
-                Expanded(
-                  child: _buildLivePreview(),
-                ),
-              ],
-            );
-          } else {
-            return _buildFormSection();
-          }
-        },
+      backgroundColor: const Color(0xFFf8f9fa),
+      body: Form(
+        key: _formKey,
+        child: Column(
+          children: [
+            // Progress indicator
+            LinearProgressIndicator(
+              value: (_currentPage + 1) / 6,
+              minHeight: 4,
+              backgroundColor: const Color(0xFF667eea).withOpacity(0.2),
+              valueColor: const AlwaysStoppedAnimation<Color>(
+                Color(0xFF667eea),
+              ),
+            ),
+
+            // Form content
+            Expanded(
+              child: PageView(
+                controller: _pageController,
+                physics: const NeverScrollableScrollPhysics(), // Disable swipe
+                onPageChanged: (page) => setState(() => _currentPage = page),
+                children: [
+                  _buildContactPage(),
+                  _buildSummaryPage(),
+                  _buildEducationPage(),
+                  _buildExperiencePage(),
+                  _buildSkillsPage(),
+                  _buildProjectsPage(),
+                ],
+              ),
+            ),
+
+            // Navigation buttons
+            Container(
+              padding: const EdgeInsets.all(16.0),
+              decoration: BoxDecoration(
+                color: const Color(0xFFf8f9fa),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, -5),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  if (_currentPage > 0)
+                    OutlinedButton(
+                      onPressed: () => _pageController.previousPage(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFF667eea)),
+                        foregroundColor: const Color(0xFF667eea),
+                      ),
+                      child: const Text('BACK'),
+                    )
+                  else
+                    const SizedBox(width: 100),
+
+                  ElevatedButton(
+                    onPressed: () {
+                      if (_currentPage < 5) {
+                        _pageController.nextPage(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOut,
+                        );
+                      } else {
+                        _saveResume();
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF667eea),
+                      foregroundColor: Colors.white,
+                      elevation: 3,
+                      shadowColor: const Color(0xFF667eea).withOpacity(0.3),
+                    ),
+                    child: Text(_currentPage < 5 ? 'NEXT' : 'SAVE RESUME'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildFormSection() {
+  Widget _buildContactPage() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Contact Information',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 24),
+          TextFormField(
+            controller: _nameController,
+            decoration: const InputDecoration(
+              labelText: 'Full Name',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.person),
+            ),
+            validator: (value) => value!.isEmpty ? 'Required field' : null,
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _emailController,
+            keyboardType: TextInputType.emailAddress,
+            decoration: const InputDecoration(
+              labelText: 'Email',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.email),
+            ),
+            validator: (value) => value!.isEmpty ? 'Required field' : null,
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _phoneController,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(
+              labelText: 'Phone Number',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.phone),
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _locationController,
+            decoration: const InputDecoration(
+              labelText: 'Location (City, Country)',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.location_on),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryPage() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Professional Summary',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Write a brief overview of your professional background',
+            style: TextStyle(color: Colors.grey),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _summaryController,
+            maxLines: 4,
+            decoration: const InputDecoration(
+              labelText: 'Professional Summary',
+              border: OutlineInputBorder(),
+              hintText:
+                  'Write a compelling summary of your professional background...',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEducationPage() {
     return Column(
       children: [
-        Expanded(
-          child: PageView(
-            controller: _pageController,
-            onPageChanged: (page) {
-              setState(() {
-                _currentPage = page;
-              });
-            },
-            children: [
-              _buildContactForm(),
-              _buildSummaryForm(),
-              _buildEducationForm(),
-              _buildExperienceForm(),
-              _buildSkillsForm(),
-              _buildProjectsForm(),
-            ],
-          ),
-        ),
         Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(16),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              ElevatedButton(
-                onPressed: _currentPage > 0
-                    ? () {
-                  _pageController.previousPage(
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeIn,
-                  );
-                }
-                    : null,
-                child: const Text('Previous'),
+              const Text(
+                'Education',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               ),
-              _buildNextButton(),
+              IconButton(
+                icon: const Icon(Icons.add_circle),
+                onPressed: () => setState(() {
+                  _educationDetails.add({
+                    'degree': '',
+                    'institution': '',
+                    'year': '',
+                    'description': '',
+                  });
+                }),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.only(bottom: 16),
+            itemCount: _educationDetails.length,
+            itemBuilder: (context, index) {
+              return _buildEducationCard(index);
+            },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => setState(() {
+                    _educationDetails.add({
+                      'degree': '',
+                      'institution': '',
+                      'year': '',
+                      'description': '',
+                    });
+                  }),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add Education'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF667eea),
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -244,362 +474,358 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
     );
   }
 
-  Widget _buildLivePreview() {
-    return Container(
-      color: Colors.grey[200],
-      padding: const EdgeInsets.all(16.0),
-      child: SingleChildScrollView(
+  Widget _buildEducationCard(int index) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              _resumeData['contact']['name'] ?? 'Your Name',
-              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Education #${index + 1}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: () =>
+                      setState(() => _educationDetails.removeAt(index)),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              '${_resumeData['contact']['email'] ?? ''} | ${_resumeData['contact']['phone'] ?? ''}',
-              style: const TextStyle(fontSize: 14),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Professional Summary',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(_resumeData['summary'] ?? ''),
-            const SizedBox(height: 20),
-            Text(
-              'Skills',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text((_resumeData['skills'] as List<dynamic>?)?.join(', ') ?? ''),
-            const SizedBox(height: 20),
-            Text(
-              'Education',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            for (var edu in _educationDetails)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    edu['degree'] ?? '',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  Text(edu['university'] ?? ''),
-                  Text(edu['year'] ?? ''),
-                  const SizedBox(height: 10),
-                ],
+            const SizedBox(height: 12),
+            TextFormField(
+              initialValue:
+                  _educationDetails[index]['degree']?.toString() ?? '',
+              decoration: const InputDecoration(
+                labelText: 'Degree',
+                border: OutlineInputBorder(),
               ),
-            const SizedBox(height: 20),
-            Text(
-              'Experience',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              onChanged: (value) => _educationDetails[index]['degree'] = value,
             ),
-            const SizedBox(height: 8),
-            for (var exp in _experienceDetails)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    exp['title'] ?? '',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  Text(exp['company'] ?? ''),
-                  Text(exp['duration'] ?? ''),
-                  const SizedBox(height: 10),
-                ],
+            const SizedBox(height: 12),
+            TextFormField(
+              initialValue:
+                  _educationDetails[index]['institution']?.toString() ?? '',
+              decoration: const InputDecoration(
+                labelText: 'Institution',
+                border: OutlineInputBorder(),
               ),
-            const SizedBox(height: 20),
-            Text(
-              'Projects',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              onChanged: (value) =>
+                  _educationDetails[index]['institution'] = value,
             ),
-            const SizedBox(height: 8),
-            for (var proj in _projectDetails)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    proj['title'] ?? '',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  Text(proj['description'] ?? ''),
-                  const SizedBox(height: 10),
-                ],
+            const SizedBox(height: 12),
+            TextFormField(
+              initialValue: _educationDetails[index]['year']?.toString() ?? '',
+              decoration: const InputDecoration(
+                labelText: 'Year',
+                border: OutlineInputBorder(),
               ),
+              onChanged: (value) => _educationDetails[index]['year'] = value,
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildContactForm() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Contact Information', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 20),
-          TextFormField(
-            controller: _nameController,
-            decoration: const InputDecoration(labelText: 'Full Name', border: OutlineInputBorder()),
-          ),
-          const SizedBox(height: 10),
-          TextFormField(
-            controller: _emailController,
-            decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()),
-          ),
-          const SizedBox(height: 10),
-          TextFormField(
-            controller: _phoneController,
-            decoration: const InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder()),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSummaryForm() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Professional Summary', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 20),
-          TextFormField(
-            controller: _summaryController,
-            maxLines: 5,
-            decoration: const InputDecoration(
-              labelText: 'Write a brief summary of your skills and experience.',
-              border: OutlineInputBorder(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEducationForm() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+  Widget _buildExperiencePage() {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Education', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-              _buildAddButton(() {
-                setState(() {
-                  _educationDetails.add({'degree': '', 'university': '', 'year': ''});
-                });
-              }),
+              const Text(
+                'Work Experience',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              IconButton(
+                icon: const Icon(Icons.add_circle),
+                onPressed: () => setState(() {
+                  _experienceDetails.add({
+                    'title': '',
+                    'company': '',
+                    'duration': '',
+                    'description': '',
+                  });
+                }),
+              ),
             ],
           ),
-          const SizedBox(height: 20),
-          Expanded(
-            child: ListView.builder(
-              itemCount: _educationDetails.length,
-              itemBuilder: (context, index) {
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('Entry ${index + 1}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                            _buildRemoveButton(() {
-                              setState(() {
-                                _educationDetails.removeAt(index);
-                              });
-                            }),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        TextFormField(
-                          initialValue: _educationDetails[index]['degree'],
-                          decoration: const InputDecoration(labelText: 'Degree', border: OutlineInputBorder()),
-                          onChanged: (value) => _educationDetails[index]['degree'] = value,
-                        ),
-                        const SizedBox(height: 10),
-                        TextFormField(
-                          initialValue: _educationDetails[index]['university'],
-                          decoration: const InputDecoration(labelText: 'University', border: OutlineInputBorder()),
-                          onChanged: (value) => _educationDetails[index]['university'] = value,
-                        ),
-                        const SizedBox(height: 10),
-                        TextFormField(
-                          initialValue: _educationDetails[index]['year'],
-                          decoration: const InputDecoration(labelText: 'Graduation Year', border: OutlineInputBorder()),
-                          onChanged: (value) => _educationDetails[index]['year'] = value,
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.only(bottom: 16),
+            itemCount: _experienceDetails.length,
+            itemBuilder: (context, index) {
+              return _buildExperienceCard(index);
+            },
           ),
-        ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildExperienceCard(int index) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Experience #${index + 1}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: () =>
+                      setState(() => _experienceDetails.removeAt(index)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              initialValue:
+                  _experienceDetails[index]['title']?.toString() ?? '',
+              decoration: const InputDecoration(
+                labelText: 'Job Title',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (value) => _experienceDetails[index]['title'] = value,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              initialValue:
+                  _experienceDetails[index]['company']?.toString() ?? '',
+              decoration: const InputDecoration(
+                labelText: 'Company',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (value) =>
+                  _experienceDetails[index]['company'] = value,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              initialValue:
+                  _experienceDetails[index]['duration']?.toString() ?? '',
+              decoration: const InputDecoration(
+                labelText: 'Duration (e.g., 2020-2023)',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (value) =>
+                  _experienceDetails[index]['duration'] = value,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              initialValue:
+                  _experienceDetails[index]['description']?.toString() ?? '',
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Description',
+                border: OutlineInputBorder(),
+                hintText: 'Describe your responsibilities and achievements...',
+              ),
+              onChanged: (value) =>
+                  _experienceDetails[index]['description'] = value,
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildExperienceForm() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
+  Widget _buildSkillsPage() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Experience', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-              _buildAddButton(() {
-                setState(() {
-                  _experienceDetails.add({'title': '', 'company': '', 'duration': ''});
-                });
-              }),
-            ],
+          const Text(
+            'Skills & Competencies',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 20),
-          Expanded(
-            child: ListView.builder(
-              itemCount: _experienceDetails.length,
-              itemBuilder: (context, index) {
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('Entry ${index + 1}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                            _buildRemoveButton(() {
-                              setState(() {
-                                _experienceDetails.removeAt(index);
-                              });
-                            }),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        TextFormField(
-                          initialValue: _experienceDetails[index]['title'],
-                          decoration: const InputDecoration(labelText: 'Job Title', border: OutlineInputBorder()),
-                          onChanged: (value) => _experienceDetails[index]['title'] = value,
-                        ),
-                        const SizedBox(height: 10),
-                        TextFormField(
-                          initialValue: _experienceDetails[index]['company'],
-                          decoration: const InputDecoration(labelText: 'Company', border: OutlineInputBorder()),
-                          onChanged: (value) => _experienceDetails[index]['company'] = value,
-                        ),
-                        const SizedBox(height: 10),
-                        TextFormField(
-                          initialValue: _experienceDetails[index]['duration'],
-                          decoration: const InputDecoration(labelText: 'Duration', border: OutlineInputBorder()),
-                          onChanged: (value) => _experienceDetails[index]['duration'] = value,
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
+          const SizedBox(height: 8),
+          const Text(
+            'List your key skills, separated by commas',
+            style: TextStyle(color: Colors.grey),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSkillsForm() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Skills', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           TextFormField(
             controller: _skillsController,
-            decoration: const InputDecoration(labelText: 'Skills (comma separated)', border: OutlineInputBorder()),
+            decoration: const InputDecoration(
+              labelText: 'Skills',
+              border: OutlineInputBorder(),
+              hintText:
+                  'Enter skills separated by commas (e.g., JavaScript, React, Node.js)',
+            ),
           ),
+
+          const SizedBox(height: 24),
+          const Text(
+            'Skill Categories',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 16),
+          _buildSkillCategory('Technical Skills', Icons.computer),
+          _buildSkillCategory('Soft Skills', Icons.people),
+          _buildSkillCategory('Languages', Icons.language),
+          _buildSkillCategory('Certifications', Icons.verified),
         ],
       ),
     );
   }
 
-  Widget _buildProjectsForm() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+  Widget _buildSkillCategory(String title, IconData icon) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        leading: Icon(icon, color: const Color(0xFF667eea)),
+        title: Text(title),
+        trailing: const Icon(Icons.add_circle_outline),
+        onTap: () {
+          // Add skill category functionality
+        },
+      ),
+    );
+  }
+
+  Widget _buildProjectsPage() {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Projects', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-              _buildAddButton(() {
-                setState(() {
-                  _projectDetails.add({'title': '', 'description': ''});
-                });
-              }),
+              const Text(
+                'Projects & Achievements',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              IconButton(
+                icon: const Icon(Icons.add_circle),
+                onPressed: () => setState(() {
+                  _projectDetails.add({
+                    'name': '',
+                    'description': '',
+                    'technologies': '',
+                    'link': '',
+                    'year': '',
+                  });
+                }),
+              ),
             ],
           ),
-          const SizedBox(height: 20),
-          Expanded(
-            child: ListView.builder(
-              itemCount: _projectDetails.length,
-              itemBuilder: (context, index) {
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('Entry ${index + 1}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                            _buildRemoveButton(() {
-                              setState(() {
-                                _projectDetails.removeAt(index);
-                              });
-                            }),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        TextFormField(
-                          initialValue: _projectDetails[index]['title'],
-                          decoration: const InputDecoration(labelText: 'Project Title', border: OutlineInputBorder()),
-                          onChanged: (value) => _projectDetails[index]['title'] = value,
-                        ),
-                        const SizedBox(height: 10),
-                        TextFormField(
-                          initialValue: _projectDetails[index]['description'],
-                          maxLines: 3,
-                          decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder()),
-                          onChanged: (value) => _projectDetails[index]['description'] = value,
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.only(bottom: 16),
+            itemCount: _projectDetails.length,
+            itemBuilder: (context, index) {
+              return _buildProjectCard(index);
+            },
           ),
-        ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProjectCard(int index) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Project #${index + 1}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: () =>
+                      setState(() => _projectDetails.removeAt(index)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              initialValue: _projectDetails[index]['name']?.toString() ?? '',
+              decoration: const InputDecoration(
+                labelText: 'Project Name',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (value) => _projectDetails[index]['name'] = value,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              initialValue:
+                  _projectDetails[index]['description']?.toString() ?? '',
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Description',
+                border: OutlineInputBorder(),
+                hintText: 'Describe what the project does...',
+              ),
+              onChanged: (value) =>
+                  _projectDetails[index]['description'] = value,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              initialValue:
+                  _projectDetails[index]['technologies']?.toString() ?? '',
+              decoration: const InputDecoration(
+                labelText: 'Technologies Used',
+                border: OutlineInputBorder(),
+                hintText: 'e.g., React, Node.js, MongoDB',
+              ),
+              onChanged: (value) =>
+                  _projectDetails[index]['technologies'] = value,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    initialValue:
+                        _projectDetails[index]['link']?.toString() ?? '',
+                    decoration: const InputDecoration(
+                      labelText: 'Project Link (optional)',
+                      border: OutlineInputBorder(),
+                      hintText: 'GitHub, live demo, etc.',
+                    ),
+                    onChanged: (value) =>
+                        _projectDetails[index]['link'] = value,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    initialValue:
+                        _projectDetails[index]['year']?.toString() ?? '',
+                    decoration: const InputDecoration(
+                      labelText: 'Year',
+                      border: OutlineInputBorder(),
+                      hintText: '2023',
+                    ),
+                    onChanged: (value) =>
+                        _projectDetails[index]['year'] = value,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

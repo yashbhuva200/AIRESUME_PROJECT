@@ -9,11 +9,13 @@ plugins {
 android {
     namespace = "com.example.aiiresume"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        // Suppress Java version warnings
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -38,6 +40,16 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    // Suppress deprecation warnings
+    lint {
+        disable += "Deprecation"
+    }
+}
+
+dependencies {
+    // Enable Java 8+ features on older Android versions
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }
 
 flutter {

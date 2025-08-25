@@ -31,8 +31,29 @@
 
   <title>aiiresume</title>
   <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <div id="loading" role="status" aria-live="polite">
+    <div class="spinner" aria-hidden="true"></div>
+    <div class="message">Loading AI Resume…</div>
+  </div>
+
+  <script>
+    // Remove loading overlay after Flutter paints its first frame
+    window.addEventListener('flutter-first-frame', function () {
+      var loadingEl = document.getElementById('loading');
+      if (loadingEl) {
+        loadingEl.classList.add('hidden');
+        // Give CSS transition time to fade out before removing
+        loadingEl.addEventListener('transitionend', function () {
+          if (loadingEl && loadingEl.parentNode) {
+            loadingEl.parentNode.removeChild(loadingEl);
+          }
+        });
+      }
+    });
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

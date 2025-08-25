@@ -12,42 +12,46 @@ class UserProfileScreen extends StatefulWidget {
 class _UserProfileScreenState extends State<UserProfileScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // TextEditingController is used to control the text being edited in a text field.
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _linkedinController = TextEditingController();
   final _githubController = TextEditingController();
 
-  // Firestore instance and user ID
   final _firestore = FirebaseFirestore.instance;
   final _userId = FirebaseAuth.instance.currentUser!.uid;
 
-  bool _isLoading = true; // State to track if data is being loaded
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    // Call the function to fetch existing profile data.
     _fetchUserProfile();
   }
 
-  // Function to fetch the user's profile data from Firestore
+  // Fetch existing profile data OR use defaults from FirebaseAuth
   void _fetchUserProfile() {
-    // The profile data will be stored in a collection named 'profile' within
-    // a user's unique document, e.g., 'users/{userId}/profile/info'.
-    final docRef = _firestore.collection('users').doc(_userId).collection('profile').doc('info');
+    final user = FirebaseAuth.instance.currentUser;
 
-    // Use a real-time listener (onSnapshot) to automatically update the form
-    // if the data changes elsewhere.
+    // Prefill with FirebaseAuth values
+    if (user != null) {
+      _nameController.text = user.displayName ?? '';
+      _emailController.text = user.email ?? '';
+    }
+
+    final docRef = _firestore
+        .collection('users')
+        .doc(_userId)
+        .collection('profile')
+        .doc('info');
+
     docRef.snapshots().listen((snapshot) {
       if (snapshot.exists) {
         final data = snapshot.data();
         if (data != null) {
-          // Populate the text controllers with the fetched data
           setState(() {
-            _nameController.text = data['name'] ?? '';
-            _emailController.text = data['email'] ?? '';
+            _nameController.text = data['name'] ?? user?.displayName ?? '';
+            _emailController.text = data['email'] ?? user?.email ?? '';
             _phoneController.text = data['phone'] ?? '';
             _linkedinController.text = data['linkedin'] ?? '';
             _githubController.text = data['github'] ?? '';
@@ -55,7 +59,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           });
         }
       } else {
-        // If no profile exists, stop loading state.
         setState(() {
           _isLoading = false;
         });
@@ -63,30 +66,28 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     });
   }
 
-  // Function to save the user's profile data to Firestore
+  // Save profile to Firestore
   Future<void> _saveProfile() async {
-    // Validate the form
     if (_formKey.currentState!.validate()) {
-      // Show a loading indicator (optional but good practice)
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Saving profile...')),
       );
 
-      // Create a map of the profile data
       final profileData = {
         'name': _nameController.text,
-        'email': _emailController.text,
+        'email': _emailController.text, // stays same as login
         'phone': _phoneController.text,
         'linkedin': _linkedinController.text,
         'github': _githubController.text,
       };
 
       try {
-        // Get a reference to the user's profile document.
-        final docRef = _firestore.collection('users').doc(_userId).collection('profile').doc('info');
+        final docRef = _firestore
+            .collection('users')
+            .doc(_userId)
+            .collection('profile')
+            .doc('info');
 
-        // Use set() with merge: true to update the document.
-        // If the document doesn't exist, it will be created.
         await docRef.set(profileData, SetOptions(merge: true));
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -112,7 +113,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Show a loading indicator while data is being fetched
     if (_isLoading) {
       return Scaffold(
         appBar: AppBar(title: const Text('Edit Profile')),
@@ -132,8 +132,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _buildTextFormField('Full Name', _nameController, isRequired: true),
-              _buildTextFormField('Email Address', _emailController, isRequired: true, keyboardType: TextInputType.emailAddress),
-              _buildTextFormField('Phone Number', _phoneController, keyboardType: TextInputType.phone),
+              _buildTextFormField('Email Address', _emailController,
+                  isRequired: true, readOnly: true,
+                  keyboardType: TextInputType.emailAddress),
+              _buildTextFormField('Phone Number', _phoneController,
+                  keyboardType: TextInputType.phone),
               _buildTextFormField('LinkedIn Profile URL', _linkedinController),
               _buildTextFormField('GitHub Profile URL', _githubController),
               const SizedBox(height: 20),
@@ -154,13 +157,20 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
   }
 
-  // A helper method to create a consistent TextFormField.
-  Widget _buildTextFormField(String labelText, TextEditingController controller, {bool isRequired = false, TextInputType keyboardType = TextInputType.text}) {
+  // Reusable TextFormField builder
+  Widget _buildTextFormField(
+      String labelText,
+      TextEditingController controller, {
+        bool isRequired = false,
+        bool readOnly = false,
+        TextInputType keyboardType = TextInputType.text,
+      }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: TextFormField(
         controller: controller,
         keyboardType: keyboardType,
+        readOnly: readOnly,
         decoration: InputDecoration(
           labelText: labelText,
           border: OutlineInputBorder(
