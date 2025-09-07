@@ -1,22 +1,34 @@
-import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'screens/user_profile_screen.dart';
-import 'screens/resume_form_screen.dart';
-import 'firebase_options.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'screens/resume_preview_screen.dart';
+import 'package:flutter/material.dart'; //ui widgets
+import 'package:firebase_core/firebase_core.dart'; //firebase core
+import 'package:firebase_auth/firebase_auth.dart'; //firebase auth
+import 'package:cloud_firestore/cloud_firestore.dart'; //firebase firestore
+import 'screens/user_profile_screen.dart'; //user profile screen
+import 'screens/resume_form_screen.dart'; //resume form screen
+import 'firebase_options.dart'; //platform specific configuration
+import 'package:google_sign_in/google_sign_in.dart'; //google sign in
+import 'package:flutter/foundation.dart'
+    show kIsWeb; //check if the app is running on web
+import 'screens/resume_preview_screen.dart'; //resume preview screen
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  WidgetsFlutterBinding.ensureInitialized(); //ensure the app is initialized
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  //this is used to initialize the firebase app with the correct platform specific configuration
+  //this is a required step for using firebase in a flutter app
+  //this is used to initialize the firebase app with the correct platform specific configuration
   runApp(const MyApp());
+  //this is used to run the app
 }
 
 class MyApp extends StatelessWidget {
+  //StatelessWidget is a widget that does not maintain any state
+
   const MyApp({super.key});
+  //from where super.key is coming from?
+  //super.key is coming from the super class
+  //super is used to refer to the parent class
+  //key is a required parameter for the MyApp class
+  //super.key is used to pass the key to the parent class
 
   @override
   Widget build(BuildContext context) {
@@ -33,6 +45,9 @@ class MyApp extends StatelessWidget {
     );
   }
 }
+//explain below class when it execute or what work and how it work
+//if user is logged in then it will show the dashboard screen
+//if user is not logged in then it will show the login screen
 
 class AuthWrapper extends StatelessWidget {
   const AuthWrapper({super.key});
@@ -40,7 +55,9 @@ class AuthWrapper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
+      stream: FirebaseAuth.instance
+          .authStateChanges(), //this is used to listen to the authentication state changes
+      //it rebuilds the widget when the authentication state changes
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
@@ -60,6 +77,7 @@ class AuthWrapper extends StatelessWidget {
   }
 }
 
+//login screen
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
 
@@ -182,7 +200,7 @@ class LoginScreen extends StatelessWidget {
                     ],
                   ),
                   child: ElevatedButton.icon(
-                    onPressed: signInWithGoogle,
+                    onPressed: signInWithGoogle, //sign in with google
                     icon: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
@@ -222,13 +240,6 @@ class LoginScreen extends StatelessWidget {
                 const Spacer(),
 
                 // Footer
-                Text(
-                  'Powered by Flutter & Firebase',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.6),
-                    fontSize: 14,
-                  ),
-                ),
               ],
             ),
           ),

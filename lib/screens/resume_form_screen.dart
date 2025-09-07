@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'resume_preview_screen.dart';
+import '../services/ai_service.dart';
 
 class ResumeFormScreen extends StatefulWidget {
   final String? resumeId;
@@ -38,6 +39,11 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
   void initState() {
     super.initState();
     _initializeData();
+
+    // Add listener to summary controller for real-time character count updates
+    _summaryController.addListener(() {
+      setState(() {}); // Trigger rebuild to update character count
+    });
   }
 
   void _initializeData() {
@@ -140,6 +146,19 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
   Future<void> _saveResume() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Check if summary is too long
+    if (_summaryController.text.length > 500) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Professional summary is too long! Please keep it under 500 characters.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isSaving = true);
 
     try {
@@ -209,6 +228,106 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
     _skillsController.dispose();
     _pageController.dispose();
     super.dispose();
+  }
+
+  /// Improves the professional summary using AI
+  Future<void> _improveSummaryWithAI() async {
+    if (_summaryController.text.isEmpty) return;
+
+    setState(() => _isSaving = true);
+
+    try {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Improving your summary with AI...'),
+            ],
+          ),
+        ),
+      );
+
+      // Call AI service to improve summary
+      final improvedSummary = await AIService.improveSummary(
+        _summaryController.text,
+      );
+
+      // Close loading dialog
+      Navigator.of(context).pop();
+
+      // Show confirmation dialog with improved summary
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('AI-Improved Summary'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Here\'s your improved professional summary:',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey[300]!),
+                ),
+                child: Text(
+                  improvedSummary,
+                  style: const TextStyle(fontSize: 14, height: 1.4),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Keep Original'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                _summaryController.text = improvedSummary;
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Summary updated with AI improvements!'),
+                    backgroundColor: Color(0xFF48bb78),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF48bb78),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Use Improved'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      // Close loading dialog if it's still open
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error improving summary: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() => _isSaving = false);
+    }
   }
 
   @override
@@ -398,12 +517,60 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
           TextFormField(
             controller: _summaryController,
             maxLines: 4,
+            maxLength: 500,
             decoration: const InputDecoration(
               labelText: 'Professional Summary',
               border: OutlineInputBorder(),
               hintText:
                   'Write a compelling summary of your professional background...',
+              counterText: '', // Hide default counter, we'll show custom one
             ),
+          ),
+          // Custom character counter
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${_summaryController.text.length}/500 characters',
+                style: TextStyle(
+                  color: _summaryController.text.length > 450
+                      ? Colors.orange
+                      : _summaryController.text.length > 500
+                      ? Colors.red
+                      : Colors.grey[600],
+                  fontSize: 12,
+                ),
+              ),
+              if (_summaryController.text.length > 500)
+                const Text(
+                  'Summary too long!',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _summaryController.text.isEmpty
+                      ? null
+                      : _improveSummaryWithAI,
+                  icon: const Icon(Icons.auto_awesome),
+                  label: const Text('Improve with AI'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF48bb78),
+                    foregroundColor: Colors.white,
+                    elevation: 3,
+                    shadowColor: const Color(0xFF48bb78).withOpacity(0.3),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
