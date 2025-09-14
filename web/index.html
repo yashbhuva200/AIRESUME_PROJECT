@@ -39,7 +39,39 @@
     <div class="message">Loading AI Resume…</div>
   </div>
 
+  <!-- Install PWA button (shown when install is available) -->
+  <button id="installBtn" class="install-btn" hidden aria-label="Install app">
+    Install App
+  </button>
+
   <script>
+    // Handle PWA install prompt
+    let deferredPrompt;
+    const installBtn = document.getElementById('installBtn');
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      // Prevent the mini-infobar on mobile
+      e.preventDefault();
+      deferredPrompt = e;
+      // Show our custom install button
+      if (installBtn) installBtn.hidden = false;
+    });
+
+    if (installBtn) {
+      installBtn.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+        installBtn.disabled = true;
+        deferredPrompt.prompt();
+        const choice = await deferredPrompt.userChoice;
+        // Hide the button after user responds
+        installBtn.hidden = true;
+        installBtn.disabled = false;
+        deferredPrompt = null;
+        // Optional: log outcome
+        console.log('PWA install choice', choice.outcome);
+      });
+    }
+
     // Remove loading overlay after Flutter paints its first frame
     window.addEventListener('flutter-first-frame', function () {
       var loadingEl = document.getElementById('loading');

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
-class ResumePreviewScreen extends StatelessWidget {
+class ResumePreviewScreen extends StatefulWidget {
   final String resumeId;
   final Map<String, dynamic> resumeData;
 
@@ -12,13 +11,26 @@ class ResumePreviewScreen extends StatelessWidget {
   });
 
   @override
+  State<ResumePreviewScreen> createState() => _ResumePreviewScreenState();
+}
+
+class _ResumePreviewScreenState extends State<ResumePreviewScreen> {
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    setState(() => _isLoading = false);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final contact = resumeData['contact'] as Map<String, dynamic>? ?? {};
-    final summary = resumeData['summary'] as String? ?? '';
-    final skills = resumeData['skills'] as List? ?? [];
-    final experience = resumeData['experience'] as List? ?? [];
-    final education = resumeData['education'] as List? ?? [];
-    final projects = resumeData['projects'] as List? ?? [];
+    final contact = widget.resumeData['contact'] as Map<String, dynamic>? ?? {};
+    final summary = widget.resumeData['summary'] as String? ?? '';
+    final skills = widget.resumeData['skills'] as List? ?? [];
+    final experience = widget.resumeData['experience'] as List? ?? [];
+    final education = widget.resumeData['education'] as List? ?? [];
+    final projects = widget.resumeData['projects'] as List? ?? [];
 
     return Scaffold(
       appBar: AppBar(
@@ -28,12 +40,17 @@ class ResumePreviewScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.download),
-            onPressed: () {
-              // TODO: Implement PDF download
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('PDF download coming soon!')),
-              );
-            },
+            onPressed: _isLoading
+                ? null
+                : () {
+                    // TODO: Implement PDF download
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('PDF download coming soon!'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  },
           ),
         ],
       ),
@@ -56,7 +73,7 @@ class ResumePreviewScreen extends StatelessWidget {
             children: [
               // Header with name and recommended badge
               Container(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(16),
                 decoration: const BoxDecoration(
                   color: Color(0xFFf8f9fa),
                   borderRadius: BorderRadius.only(
@@ -71,10 +88,10 @@ class ResumePreviewScreen extends StatelessWidget {
                         contact['name']?.toString().toUpperCase() ??
                             'YOUR NAME',
                         style: const TextStyle(
-                          fontSize: 28,
+                          fontSize: 24,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFF2d3748),
-                          letterSpacing: 1.2,
+                          letterSpacing: 1.0,
                         ),
                       ),
                     ),
@@ -303,7 +320,7 @@ class ResumePreviewScreen extends StatelessWidget {
 
   Widget _buildExperienceItem(Map<String, dynamic> exp) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -313,7 +330,7 @@ class ResumePreviewScreen extends StatelessWidget {
                 child: Text(
                   exp['title']?.toString().toUpperCase() ?? 'JOB TITLE',
                   style: const TextStyle(
-                    fontSize: 16,
+                    fontSize: 14,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF2d3748),
                   ),
@@ -322,7 +339,7 @@ class ResumePreviewScreen extends StatelessWidget {
               Text(
                 exp['duration']?.toString() ?? '',
                 style: const TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
                   color: Color(0xFF718096),
                   fontWeight: FontWeight.w500,
                 ),
@@ -330,24 +347,24 @@ class ResumePreviewScreen extends StatelessWidget {
             ],
           ),
           if (exp['company'] != null) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
               exp['company'].toString(),
               style: const TextStyle(
-                fontSize: 14,
+                fontSize: 12,
                 color: Color(0xFF667eea),
                 fontWeight: FontWeight.w600,
               ),
             ),
           ],
           if (exp['description'] != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
               exp['description'].toString(),
               style: const TextStyle(
-                fontSize: 13,
+                fontSize: 11,
                 color: Color(0xFF4a5568),
-                height: 1.4,
+                height: 1.3,
               ),
             ),
           ],

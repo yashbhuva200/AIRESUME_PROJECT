@@ -45,6 +45,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }
 
   // Fetch existing profile data OR use defaults from FirebaseAuth
+
   void _fetchUserProfile() {
     final user = FirebaseAuth.instance.currentUser;
 
@@ -98,11 +99,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       };
 
       try {
+        //explain sysntax and workflow of this line
+        //_firestore is used to store and fetch the data in the database
         final docRef = _firestore
             .collection('users')
             .doc(_userId)
             .collection('profile')
             .doc('info');
+        //_docRef.set is used to set the data in the database
 
         await docRef.set(profileData, SetOptions(merge: true));
 
@@ -147,6 +151,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             children: [
               _buildTextFormField(
                 'Full Name',
+
                 _nameController,
                 isRequired: true,
               ),

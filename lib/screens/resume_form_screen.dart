@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'resume_preview_screen.dart';
 import '../services/ai_service.dart';
+import '../widgets/skill_input_widget.dart';
+import '../widgets/skill_suggestion_widget.dart';
 
 class ResumeFormScreen extends StatefulWidget {
   final String? resumeId;
@@ -28,12 +30,19 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
   // Data models
   List<Map<String, dynamic>> _educationDetails = [];
   List<Map<String, dynamic>> _experienceDetails = [];
+  List<TextEditingController> _experienceDescriptionControllers = [];
   List<Map<String, dynamic>> _projectDetails = [];
+  List<TextEditingController> _projectDescriptionControllers = [];
 
   final _firestore = FirebaseFirestore.instance;
   final _userId = FirebaseAuth.instance.currentUser!.uid;
   bool _isLoading = true;
   bool _isSaving = false;
+
+  // Skill suggestion state
+  List<String> _suggestedSkills = [];
+  List<String> _selectedSkills = [];
+  bool _isLoadingSkillSuggestions = false;
 
   @override
   void initState() {
@@ -89,7 +98,9 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
         if (data['skills'] != null) {
           final skills = data['skills'] as List;
           if (skills.isNotEmpty) {
-            _skillsController.text = skills.map((s) => s.toString()).join(', ');
+            final skillsText = skills.map((s) => s.toString()).join(', ');
+            _skillsController.text = skillsText;
+            _selectedSkills = skills.map((s) => s.toString()).toList();
           }
         }
 
@@ -115,8 +126,16 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
             }
             return <String, dynamic>{};
           }).toList();
+
+          // Create controllers for existing experience data
+          _experienceDescriptionControllers = _experienceDetails.map((item) {
+            final controller = TextEditingController();
+            controller.text = item['description']?.toString() ?? '';
+            return controller;
+          }).toList();
         } else {
           _experienceDetails = [];
+          _experienceDescriptionControllers = [];
         }
 
         // Handle project details
@@ -128,8 +147,16 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
             }
             return <String, dynamic>{};
           }).toList();
+
+          // Create controllers for existing project data
+          _projectDescriptionControllers = _projectDetails.map((item) {
+            final controller = TextEditingController();
+            controller.text = item['description']?.toString() ?? '';
+            return controller;
+          }).toList();
         } else {
           _projectDetails = [];
+          _projectDescriptionControllers = [];
         }
 
         setState(() {});
@@ -158,6 +185,8 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
       );
       return;
     }
+
+    // If user is not premium, show premium dialog
 
     setState(() => _isSaving = true);
 
@@ -227,7 +256,66 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
     _summaryController.dispose();
     _skillsController.dispose();
     _pageController.dispose();
+    // Dispose experience description controllers
+    for (var controller in _experienceDescriptionControllers) {
+      controller.dispose();
+    }
+    // Dispose project description controllers
+    for (var controller in _projectDescriptionControllers) {
+      controller.dispose();
+    }
     super.dispose();
+  }
+
+  /// Generates AI summary for a specific job experience
+  Future<void> _generateJobSummary(int index) async {
+    final jobTitle = _experienceDetails[index]['title']?.toString() ?? '';
+    final company = _experienceDetails[index]['company']?.toString() ?? '';
+    final duration = _experienceDetails[index]['duration']?.toString() ?? '';
+
+    if (jobTitle.isEmpty || company.isEmpty || duration.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please fill in Job Title, Company, and Duration first',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      final aiSummary = await AIService.generateJobExperienceSummary(
+        jobTitle: jobTitle,
+        company: company,
+        duration: duration,
+        jobDescription: _experienceDetails[index]['description']?.toString(),
+      );
+
+      setState(() {
+        _experienceDetails[index]['description'] = aiSummary;
+        _experienceDescriptionControllers[index].text = aiSummary;
+        _isSaving = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('AI summary generated successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error generating summary: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   /// Improves the professional summary using AI
@@ -719,6 +807,9 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
                     'duration': '',
                     'description': '',
                   });
+                  _experienceDescriptionControllers.add(
+                    TextEditingController(),
+                  );
                 }),
               ),
             ],
@@ -737,6 +828,266 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
     );
   }
 
+  /// Generates AI summary for a specific project
+  Future<void> _generateProjectSummary(int index) async {
+    final projectTitle = _projectDetails[index]['title']?.toString() ?? '';
+    final projectDescription =
+        _projectDetails[index]['description']?.toString() ?? '';
+    final technologies =
+        _projectDetails[index]['technologies']?.toString() ?? '';
+    final duration = _projectDetails[index]['duration']?.toString() ?? '';
+
+    if (projectTitle.isEmpty || technologies.isEmpty || duration.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please fill in Project Title, Technologies, and Duration first',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      final aiSummary = await AIService.generateProjectSummary(
+        projectTitle: projectTitle,
+        projectDescription: projectDescription,
+        technologies: technologies,
+        duration: duration,
+      );
+
+      setState(() {
+        _projectDetails[index]['description'] = aiSummary;
+        _projectDescriptionControllers[index].text = aiSummary;
+        _isSaving = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('AI project summary generated successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error generating project summary: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// Generates AI skill suggestions based on the professional summary
+  Future<void> _generateSkillSuggestions() async {
+    final summary = _summaryController.text.trim();
+
+    if (summary.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please write a professional summary first'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoadingSkillSuggestions = true);
+
+    try {
+      // Add a timeout to prevent long delays
+      final suggestions =
+          await AIService.suggestSkillsFromSummary(summary: summary).timeout(
+            const Duration(seconds: 15),
+            onTimeout: () {
+              // Return fallback skills if timeout occurs
+              return _getFallbackSkills(summary);
+            },
+          );
+
+      setState(() {
+        _suggestedSkills = suggestions;
+        _isLoadingSkillSuggestions = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${suggestions.length} skill suggestions generated!'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _isLoadingSkillSuggestions = false);
+
+      // Provide fallback skills even on error
+      final fallbackSkills = _getFallbackSkills(summary);
+      setState(() {
+        _suggestedSkills = fallbackSkills;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Using fallback skill suggestions (${fallbackSkills.length} skills)',
+            ),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Provides fallback skills when AI fails
+  List<String> _getFallbackSkills(String summary) {
+    final summaryLower = summary.toLowerCase();
+    final fallbackSkills = <String>[];
+
+    // Technical skills based on keywords
+    if (summaryLower.contains('developer') ||
+        summaryLower.contains('programming') ||
+        summaryLower.contains('software')) {
+      fallbackSkills.addAll([
+        'JavaScript',
+        'Python',
+        'Git',
+        'Problem Solving',
+        'Teamwork',
+      ]);
+    }
+    if (summaryLower.contains('web') ||
+        summaryLower.contains('frontend') ||
+        summaryLower.contains('backend')) {
+      fallbackSkills.addAll([
+        'HTML',
+        'CSS',
+        'React',
+        'Node.js',
+        'Communication',
+      ]);
+    }
+    if (summaryLower.contains('mobile') || summaryLower.contains('app')) {
+      fallbackSkills.addAll([
+        'React Native',
+        'Flutter',
+        'iOS',
+        'Android',
+        'User Experience',
+      ]);
+    }
+    if (summaryLower.contains('data') ||
+        summaryLower.contains('analyst') ||
+        summaryLower.contains('analytics')) {
+      fallbackSkills.addAll([
+        'Python',
+        'SQL',
+        'Excel',
+        'Analytics',
+        'Critical Thinking',
+      ]);
+    }
+    if (summaryLower.contains('design') ||
+        summaryLower.contains('ui') ||
+        summaryLower.contains('ux')) {
+      fallbackSkills.addAll([
+        'Figma',
+        'Adobe XD',
+        'Photoshop',
+        'UI/UX Design',
+        'Creativity',
+      ]);
+    }
+    if (summaryLower.contains('manager') ||
+        summaryLower.contains('lead') ||
+        summaryLower.contains('supervisor')) {
+      fallbackSkills.addAll([
+        'Leadership',
+        'Project Management',
+        'Team Management',
+        'Communication',
+        'Strategic Thinking',
+      ]);
+    }
+    if (summaryLower.contains('marketing') || summaryLower.contains('sales')) {
+      fallbackSkills.addAll([
+        'Digital Marketing',
+        'Communication',
+        'Customer Service',
+        'Analytics',
+        'Negotiation',
+      ]);
+    }
+    if (summaryLower.contains('finance') ||
+        summaryLower.contains('accounting')) {
+      fallbackSkills.addAll([
+        'Financial Analysis',
+        'Excel',
+        'Accounting',
+        'Attention to Detail',
+        'Problem Solving',
+      ]);
+    }
+    if (summaryLower.contains('healthcare') ||
+        summaryLower.contains('medical')) {
+      fallbackSkills.addAll([
+        'Patient Care',
+        'Medical Records',
+        'HIPAA',
+        'Communication',
+        'Attention to Detail',
+      ]);
+    }
+    if (summaryLower.contains('education') ||
+        summaryLower.contains('teaching')) {
+      fallbackSkills.addAll([
+        'Teaching',
+        'Communication',
+        'Curriculum Development',
+        'Mentoring',
+        'Patience',
+      ]);
+    }
+
+    // Always add common soft skills
+    fallbackSkills.addAll([
+      'Communication',
+      'Problem Solving',
+      'Time Management',
+      'Teamwork',
+      'Adaptability',
+    ]);
+
+    // Remove duplicates and return
+    return fallbackSkills.toSet().take(15).toList();
+  }
+
+  /// Handles skill selection from AI suggestions
+  void _onSkillSelected(String skill) {
+    setState(() {
+      if (_selectedSkills.contains(skill)) {
+        _selectedSkills.remove(skill);
+      } else {
+        _selectedSkills.add(skill);
+      }
+      _updateSkillsText();
+    });
+  }
+
+  /// Updates the skills text field with selected skills
+  void _updateSkillsText() {
+    final skillsText = _selectedSkills.join(', ');
+    _skillsController.text = skillsText;
+  }
+
   Widget _buildExperienceCard(int index) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -753,8 +1104,11 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
                 ),
                 IconButton(
                   icon: const Icon(Icons.delete, color: Colors.red),
-                  onPressed: () =>
-                      setState(() => _experienceDetails.removeAt(index)),
+                  onPressed: () => setState(() {
+                    _experienceDescriptionControllers[index].dispose();
+                    _experienceDescriptionControllers.removeAt(index);
+                    _experienceDetails.removeAt(index);
+                  }),
                 ),
               ],
             ),
@@ -791,17 +1145,32 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
                   _experienceDetails[index]['duration'] = value,
             ),
             const SizedBox(height: 12),
-            TextFormField(
-              initialValue:
-                  _experienceDetails[index]['description']?.toString() ?? '',
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Description',
-                border: OutlineInputBorder(),
-                hintText: 'Describe your responsibilities and achievements...',
-              ),
-              onChanged: (value) =>
-                  _experienceDetails[index]['description'] = value,
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _experienceDescriptionControllers[index],
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Description',
+                      border: OutlineInputBorder(),
+                      hintText:
+                          'Describe your responsibilities and achievements...',
+                    ),
+                    onChanged: (value) =>
+                        _experienceDetails[index]['description'] = value,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: () => _generateJobSummary(index),
+                  icon: const Icon(
+                    Icons.auto_awesome,
+                    color: Color(0xFF667eea),
+                  ),
+                  tooltip: 'Generate AI Summary',
+                ),
+              ],
             ),
           ],
         ),
@@ -815,51 +1184,54 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Skills & Competencies',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Skills & Competencies',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              IconButton(
+                onPressed: _generateSkillSuggestions,
+                icon: const Icon(Icons.auto_awesome, color: Color(0xFF667eea)),
+                tooltip: 'Generate AI Skill Suggestions',
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           const Text(
-            'List your key skills, separated by commas',
+            'Add skills manually or use AI suggestions based on your summary',
             style: TextStyle(color: Colors.grey),
           ),
           const SizedBox(height: 16),
-          TextFormField(
-            controller: _skillsController,
-            decoration: const InputDecoration(
-              labelText: 'Skills',
-              border: OutlineInputBorder(),
-              hintText:
-                  'Enter skills separated by commas (e.g., JavaScript, React, Node.js)',
-            ),
+
+          // AI Skill Suggestions
+          SkillSuggestionWidget(
+            suggestedSkills: _suggestedSkills,
+            selectedSkills: _selectedSkills,
+            onSkillSelected: _onSkillSelected,
+            isLoading: _isLoadingSkillSuggestions,
           ),
 
-          const SizedBox(height: 24),
-          const Text(
-            'Skill Categories',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          if (_suggestedSkills.isNotEmpty) const SizedBox(height: 16),
+
+          // Skill Input Widget
+          SkillInputWidget(
+            initialValue: _skillsController.text,
+            onChanged: (value) {
+              _skillsController.text = value;
+              // Update selected skills from the input
+              _selectedSkills = value
+                  .split(',')
+                  .map((s) => s.trim())
+                  .where((s) => s.isNotEmpty)
+                  .toList();
+            },
+            onSkillsSelected: (skills) {
+              _selectedSkills = skills;
+            },
           ),
-          const SizedBox(height: 16),
-          _buildSkillCategory('Technical Skills', Icons.computer),
-          _buildSkillCategory('Soft Skills', Icons.people),
-          _buildSkillCategory('Languages', Icons.language),
-          _buildSkillCategory('Certifications', Icons.verified),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSkillCategory(String title, IconData icon) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
-        leading: Icon(icon, color: const Color(0xFF667eea)),
-        title: Text(title),
-        trailing: const Icon(Icons.add_circle_outline),
-        onTap: () {
-          // Add skill category functionality
-        },
       ),
     );
   }
@@ -880,12 +1252,13 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
                 icon: const Icon(Icons.add_circle),
                 onPressed: () => setState(() {
                   _projectDetails.add({
-                    'name': '',
+                    'title': '',
                     'description': '',
                     'technologies': '',
                     'link': '',
-                    'year': '',
+                    'duration': '',
                   });
+                  _projectDescriptionControllers.add(TextEditingController());
                 }),
               ),
             ],
@@ -920,32 +1293,49 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
                 ),
                 IconButton(
                   icon: const Icon(Icons.delete, color: Colors.red),
-                  onPressed: () =>
-                      setState(() => _projectDetails.removeAt(index)),
+                  onPressed: () => setState(() {
+                    _projectDescriptionControllers[index].dispose();
+                    _projectDescriptionControllers.removeAt(index);
+                    _projectDetails.removeAt(index);
+                  }),
                 ),
               ],
             ),
             const SizedBox(height: 12),
             TextFormField(
-              initialValue: _projectDetails[index]['name']?.toString() ?? '',
+              initialValue: _projectDetails[index]['title']?.toString() ?? '',
               decoration: const InputDecoration(
-                labelText: 'Project Name',
+                labelText: 'Project Title',
                 border: OutlineInputBorder(),
               ),
-              onChanged: (value) => _projectDetails[index]['name'] = value,
+              onChanged: (value) => _projectDetails[index]['title'] = value,
             ),
             const SizedBox(height: 12),
-            TextFormField(
-              initialValue:
-                  _projectDetails[index]['description']?.toString() ?? '',
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Description',
-                border: OutlineInputBorder(),
-                hintText: 'Describe what the project does...',
-              ),
-              onChanged: (value) =>
-                  _projectDetails[index]['description'] = value,
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _projectDescriptionControllers[index],
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Description',
+                      border: OutlineInputBorder(),
+                      hintText: 'Describe what the project does...',
+                    ),
+                    onChanged: (value) =>
+                        _projectDetails[index]['description'] = value,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: () => _generateProjectSummary(index),
+                  icon: const Icon(
+                    Icons.auto_awesome,
+                    color: Color(0xFF667eea),
+                  ),
+                  tooltip: 'Generate AI Summary',
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -979,14 +1369,14 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
                 Expanded(
                   child: TextFormField(
                     initialValue:
-                        _projectDetails[index]['year']?.toString() ?? '',
+                        _projectDetails[index]['duration']?.toString() ?? '',
                     decoration: const InputDecoration(
-                      labelText: 'Year',
+                      labelText: 'Duration',
                       border: OutlineInputBorder(),
-                      hintText: '2023',
+                      hintText: '3 months, 6 months, etc.',
                     ),
                     onChanged: (value) =>
-                        _projectDetails[index]['year'] = value,
+                        _projectDetails[index]['duration'] = value,
                   ),
                 ),
               ],
