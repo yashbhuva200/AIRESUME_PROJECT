@@ -8,7 +8,8 @@ import '../widgets/skill_suggestion_widget.dart';
 
 class ResumeFormScreen extends StatefulWidget {
   final String? resumeId;
-  const ResumeFormScreen({super.key, this.resumeId});
+  final String? templateKey; // chosen template key
+  const ResumeFormScreen({super.key, this.resumeId, this.templateKey});
 
   @override
   State<ResumeFormScreen> createState() => _ResumeFormScreenState();
@@ -26,6 +27,133 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
   final _locationController = TextEditingController();
   final _summaryController = TextEditingController();
   final _skillsController = TextEditingController();
+
+  // Validation methods
+  String? _validateName(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Name is required';
+    }
+    if (value.trim().length < 2) {
+      return 'Name must be at least 2 characters';
+    }
+    if (value.trim().length > 50) {
+      return 'Name must be less than 50 characters';
+    }
+    if (!RegExp(r'^[a-zA-Z\s]+$').hasMatch(value.trim())) {
+      return 'Name can only contain letters and spaces';
+    }
+    return null;
+  }
+
+  String? _validateEmail(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Email is required';
+    }
+    if (!RegExp(
+      r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+    ).hasMatch(value.trim())) {
+      return 'Please enter a valid email address';
+    }
+    return null;
+  }
+
+  String? _validatePhone(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Phone number is required';
+    }
+    final cleanPhone = value.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+    if (!RegExp(r'^[\+]?[0-9]{7,15}$').hasMatch(cleanPhone)) {
+      return 'Please enter a valid phone number (7-15 digits)';
+    }
+    return null;
+  }
+
+  String? _validateLocation(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Location is required';
+    }
+    if (value.trim().length < 2) {
+      return 'Location must be at least 2 characters';
+    }
+    if (value.trim().length > 100) {
+      return 'Location must be less than 100 characters';
+    }
+    return null;
+  }
+
+  String? _validateSummary(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Professional summary is required';
+    }
+    if (value.trim().length < 50) {
+      return 'Summary must be at least 50 characters';
+    }
+    if (value.trim().length > 500) {
+      return 'Summary must be less than 500 characters';
+    }
+    return null;
+  }
+
+  String? _validateTextLength(
+    String? value,
+    String fieldName,
+    int minLength,
+    int maxLength,
+  ) {
+    if (value == null || value.trim().isEmpty) {
+      return '$fieldName is required';
+    }
+    if (value.trim().length < minLength) {
+      return '$fieldName must be at least $minLength characters';
+    }
+    if (value.trim().length > maxLength) {
+      return '$fieldName must be less than $maxLength characters';
+    }
+    return null;
+  }
+
+  String? _validateJobTitle(String? value) {
+    return _validateTextLength(value, 'Job Title', 2, 100);
+  }
+
+  String? _validateCompany(String? value) {
+    return _validateTextLength(value, 'Company', 2, 100);
+  }
+
+  String? _validateDuration(String? value) {
+    return _validateTextLength(value, 'Duration', 2, 50);
+  }
+
+  String? _validateDegree(String? value) {
+    return _validateTextLength(value, 'Degree', 2, 100);
+  }
+
+  String? _validateInstitution(String? value) {
+    return _validateTextLength(value, 'Institution', 2, 100);
+  }
+
+  String? _validateYear(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Year is required';
+    }
+    final year = int.tryParse(value.trim());
+    if (year == null) {
+      return 'Please enter a valid year';
+    }
+    final currentYear = DateTime.now().year;
+    if (year < 1950 || year > currentYear + 5) {
+      return 'Please enter a valid year (1950-${currentYear + 5})';
+    }
+    return null;
+  }
+
+  String? _validateProjectTitle(String? value) {
+    return _validateTextLength(value, 'Project Title', 2, 100);
+  }
+
+  String? _validateTechnologies(String? value) {
+    return _validateTextLength(value, 'Technologies', 2, 200);
+  }
 
   // Data models
   List<Map<String, dynamic>> _educationDetails = [];
@@ -59,6 +187,9 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
     if (widget.resumeId != null) {
       _fetchResumeData(widget.resumeId!);
     } else {
+      // If creating new, ensure template exists; if not, default to classic_left
+      // The preview will need this key to render the correct template
+
       setState(() => _isLoading = false);
     }
   }
@@ -170,21 +301,75 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
     }
   }
 
-  Future<void> _saveResume() async {
-    if (!_formKey.currentState!.validate()) return;
+  bool _validateAllFields() {
+    // Validate basic contact information
+    if (!_formKey.currentState!.validate()) return false;
 
-    // Check if summary is too long
-    if (_summaryController.text.length > 500) {
+    // Validate experience entries
+    for (int i = 0; i < _experienceDetails.length; i++) {
+      final exp = _experienceDetails[i];
+      if (_validateJobTitle(exp['title']?.toString()) != null ||
+          _validateCompany(exp['company']?.toString()) != null ||
+          _validateDuration(exp['duration']?.toString()) != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Please fix validation errors in Experience ${i + 1}',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return false;
+      }
+    }
+
+    // Validate education entries
+    for (int i = 0; i < _educationDetails.length; i++) {
+      final edu = _educationDetails[i];
+      if (_validateDegree(edu['degree']?.toString()) != null ||
+          _validateInstitution(edu['institution']?.toString()) != null ||
+          _validateYear(edu['year']?.toString()) != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Please fix validation errors in Education ${i + 1}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return false;
+      }
+    }
+
+    // Validate project entries
+    for (int i = 0; i < _projectDetails.length; i++) {
+      final proj = _projectDetails[i];
+      if (_validateProjectTitle(proj['title']?.toString()) != null ||
+          _validateTechnologies(proj['technologies']?.toString()) != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Please fix validation errors in Project ${i + 1}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return false;
+      }
+    }
+
+    // Validate skills
+    if (_selectedSkills.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Professional summary is too long! Please keep it under 500 characters.',
-          ),
+          content: Text('Please add at least one skill'),
           backgroundColor: Colors.red,
         ),
       );
-      return;
+      return false;
     }
+
+    return true;
+  }
+
+  Future<void> _saveResume() async {
+    if (!_validateAllFields()) return;
 
     // If user is not premium, show premium dialog
 
@@ -198,6 +383,7 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
           'phone': _phoneController.text,
           'location': _locationController.text,
         },
+        'template': widget.templateKey ?? 'classic_left',
         'summary': _summaryController.text,
         'skills': _skillsController.text
             .split(',')
@@ -549,37 +735,43 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.person),
             ),
-            validator: (value) => value!.isEmpty ? 'Required field' : null,
+            validator: _validateName,
           ),
           const SizedBox(height: 16),
           TextFormField(
             controller: _emailController,
             keyboardType: TextInputType.emailAddress,
             decoration: const InputDecoration(
-              labelText: 'Email',
+              labelText: 'Email *',
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.email),
+              hintText: 'example@email.com',
             ),
-            validator: (value) => value!.isEmpty ? 'Required field' : null,
+            validator: _validateEmail,
           ),
           const SizedBox(height: 16),
           TextFormField(
             controller: _phoneController,
             keyboardType: TextInputType.phone,
             decoration: const InputDecoration(
-              labelText: 'Phone Number',
+              labelText: 'Phone Number *',
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.phone),
+              hintText: '+1 (555) 123-4567',
             ),
+            validator: _validatePhone,
           ),
           const SizedBox(height: 16),
           TextFormField(
             controller: _locationController,
             decoration: const InputDecoration(
-              labelText: 'Location (City, Country)',
+              labelText: 'Location (City, Country) *',
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.location_on),
+              hintText: 'New York, USA',
             ),
+            validator: _validateLocation,
+            textCapitalization: TextCapitalization.words,
           ),
         ],
       ),
@@ -607,12 +799,13 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
             maxLines: 4,
             maxLength: 500,
             decoration: const InputDecoration(
-              labelText: 'Professional Summary',
+              labelText: 'Professional Summary *',
               border: OutlineInputBorder(),
               hintText:
                   'Write a compelling summary of your professional background...',
               counterText: '', // Hide default counter, we'll show custom one
             ),
+            validator: _validateSummary,
           ),
           // Custom character counter
           Row(
@@ -656,6 +849,44 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
                     elevation: 3,
                     shadowColor: const Color(0xFF48bb78).withOpacity(0.3),
                   ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _summaryController.text.isEmpty
+                      ? null
+                      : () async {
+                          setState(() => _isSaving = true);
+                          try {
+                            final compact =
+                                await AIService.generateConciseSummary(
+                                  _summaryController.text,
+                                );
+                            _summaryController.text = compact;
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Summary condensed successfully',
+                                  ),
+                                  backgroundColor: Color(0xFF48bb78),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('AI error: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          } finally {
+                            setState(() => _isSaving = false);
+                          }
+                        },
+                  icon: const Icon(Icons.compress),
+                  label: const Text('Make Concise'),
                 ),
               ),
             ],
@@ -755,9 +986,11 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
               initialValue:
                   _educationDetails[index]['degree']?.toString() ?? '',
               decoration: const InputDecoration(
-                labelText: 'Degree',
+                labelText: 'Degree *',
                 border: OutlineInputBorder(),
+                hintText: 'e.g., Bachelor of Technology',
               ),
+              validator: _validateDegree,
               onChanged: (value) => _educationDetails[index]['degree'] = value,
             ),
             const SizedBox(height: 12),
@@ -765,9 +998,11 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
               initialValue:
                   _educationDetails[index]['institution']?.toString() ?? '',
               decoration: const InputDecoration(
-                labelText: 'Institution',
+                labelText: 'Institution *',
                 border: OutlineInputBorder(),
+                hintText: 'e.g., Stanford University',
               ),
+              validator: _validateInstitution,
               onChanged: (value) =>
                   _educationDetails[index]['institution'] = value,
             ),
@@ -775,9 +1010,12 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
             TextFormField(
               initialValue: _educationDetails[index]['year']?.toString() ?? '',
               decoration: const InputDecoration(
-                labelText: 'Year',
+                labelText: 'Year *',
                 border: OutlineInputBorder(),
+                hintText: 'e.g., 2023',
               ),
+              keyboardType: TextInputType.number,
+              validator: _validateYear,
               onChanged: (value) => _educationDetails[index]['year'] = value,
             ),
           ],
@@ -1117,9 +1355,11 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
               initialValue:
                   _experienceDetails[index]['title']?.toString() ?? '',
               decoration: const InputDecoration(
-                labelText: 'Job Title',
+                labelText: 'Job Title *',
                 border: OutlineInputBorder(),
+                hintText: 'e.g., Software Engineer',
               ),
+              validator: _validateJobTitle,
               onChanged: (value) => _experienceDetails[index]['title'] = value,
             ),
             const SizedBox(height: 12),
@@ -1127,9 +1367,11 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
               initialValue:
                   _experienceDetails[index]['company']?.toString() ?? '',
               decoration: const InputDecoration(
-                labelText: 'Company',
+                labelText: 'Company *',
                 border: OutlineInputBorder(),
+                hintText: 'e.g., Google, Microsoft',
               ),
+              validator: _validateCompany,
               onChanged: (value) =>
                   _experienceDetails[index]['company'] = value,
             ),
@@ -1138,9 +1380,11 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
               initialValue:
                   _experienceDetails[index]['duration']?.toString() ?? '',
               decoration: const InputDecoration(
-                labelText: 'Duration (e.g., 2020-2023)',
+                labelText: 'Duration *',
                 border: OutlineInputBorder(),
+                hintText: 'e.g., Jan 2020 - Present',
               ),
+              validator: _validateDuration,
               onChanged: (value) =>
                   _experienceDetails[index]['duration'] = value,
             ),
@@ -1305,9 +1549,11 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
             TextFormField(
               initialValue: _projectDetails[index]['title']?.toString() ?? '',
               decoration: const InputDecoration(
-                labelText: 'Project Title',
+                labelText: 'Project Title *',
                 border: OutlineInputBorder(),
+                hintText: 'e.g., E-commerce Website',
               ),
+              validator: _validateProjectTitle,
               onChanged: (value) => _projectDetails[index]['title'] = value,
             ),
             const SizedBox(height: 12),
@@ -1342,10 +1588,11 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
               initialValue:
                   _projectDetails[index]['technologies']?.toString() ?? '',
               decoration: const InputDecoration(
-                labelText: 'Technologies Used',
+                labelText: 'Technologies Used *',
                 border: OutlineInputBorder(),
                 hintText: 'e.g., React, Node.js, MongoDB',
               ),
+              validator: _validateTechnologies,
               onChanged: (value) =>
                   _projectDetails[index]['technologies'] = value,
             ),
