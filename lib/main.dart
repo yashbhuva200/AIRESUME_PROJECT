@@ -4,11 +4,13 @@ import 'package:firebase_auth/firebase_auth.dart'; //firebase auth
 import 'package:cloud_firestore/cloud_firestore.dart'; //firebase firestore
 import 'screens/user_profile_screen.dart'; //user profile screen
 import 'screens/resume_form_screen.dart'; //resume form screen
+import 'screens/template_selection_screen.dart';
 import 'firebase_options.dart'; //platform specific configuration
 import 'package:google_sign_in/google_sign_in.dart'; //google sign in
 import 'package:flutter/foundation.dart'
     show kIsWeb; //check if the app is running on web
 import 'screens/resume_preview_screen.dart'; //resume preview screen
+import 'widgets/template_selection_dialog.dart'; //template selection dialog
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized(); //ensure the app is initialized
@@ -435,7 +437,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (context) => const ResumeFormScreen(),
+                          builder: (context) => const TemplateSelectionScreen(),
                         ),
                       );
                     },
@@ -563,7 +565,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 Navigator.of(context).push(
                                   MaterialPageRoute(
                                     builder: (context) =>
-                                        const ResumeFormScreen(),
+                                        const TemplateSelectionScreen(),
                                   ),
                                 );
                               },
@@ -692,6 +694,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   ),
                                   child: const Icon(
                                     Icons.visibility,
+                                    color: Color(0xFF48bb78),
+                                    size: 20,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              GestureDetector(
+                                onTap: () async {
+                                  // View resume with template selection
+                                  final selectedTemplate =
+                                      await showDialog<String>(
+                                        context: context,
+                                        builder: (context) =>
+                                            TemplateSelectionDialog(
+                                              resumeName: name,
+                                              resumeData: data ?? {},
+                                            ),
+                                      );
+
+                                  if (selectedTemplate != null &&
+                                      context.mounted) {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            ResumePreviewScreen(
+                                              resumeId: resume.id,
+                                              resumeData: data ?? {},
+                                              selectedTemplate:
+                                                  selectedTemplate,
+                                            ),
+                                      ),
+                                    );
+                                  }
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: const Color(
+                                      0xFF48bb78,
+                                    ).withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(
+                                    Icons.visibility_outlined,
                                     color: Color(0xFF48bb78),
                                     size: 20,
                                   ),

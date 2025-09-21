@@ -58,6 +58,56 @@ Return only the improved summary without any explanations or additional text.
     }
   }
 
+  /// Produces a compact professional summary (mini version)
+  static Future<String> generateConciseSummary(String currentSummary) async {
+    try {
+      final prompt =
+          '''
+Rewrite the following professional summary into a compact, recruiter-friendly paragraph:
+
+Text: $currentSummary
+
+Constraints:
+- 2-3 sentences only (max ~350 characters)
+- Keep the strongest achievements and skills
+- Use clear, simple language and strong verbs
+- Remove fluff and redundancy
+- Return only the compact summary, no quotes or extra text
+''';
+
+      final response = await http.post(
+        Uri.parse(_baseUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-goog-api-key': _apiKey,
+        },
+        body: jsonEncode({
+          'contents': [
+            {
+              'parts': [
+                {'text': prompt},
+              ],
+            },
+          ],
+          'generationConfig': {'temperature': 0.6, 'maxOutputTokens': 200},
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final generatedText =
+            data['candidates'][0]['content']['parts'][0]['text'];
+        return generatedText.trim();
+      } else {
+        throw Exception(
+          'Failed to generate concise summary: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      throw Exception('Error generating concise summary: $e');
+    }
+  }
+
   /// Generates a professional summary from scratch based on user's role and experience
   static Future<String> generateSummaryFromScratch({
     required String jobTitle,
