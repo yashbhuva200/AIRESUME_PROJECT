@@ -24,6 +24,8 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _locationController = TextEditingController();
+  final _linkedinController = TextEditingController();
+  final _githubController = TextEditingController();
   final _summaryController = TextEditingController();
   final _skillsController = TextEditingController();
 
@@ -59,7 +61,42 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
     if (widget.resumeId != null) {
       _fetchResumeData(widget.resumeId!);
     } else {
+      // If creating new, fetch user profile data to prefill contact fields
+      _fetchUserProfile();
       setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _fetchUserProfile() async {
+    try {
+      final doc = await _firestore
+          .collection('users')
+          .doc(_userId)
+          .collection('profile')
+          .doc('info')
+          .get();
+
+      if (doc.exists) {
+        final data = doc.data()!;
+        setState(() {
+          _nameController.text = data['name'] ?? '';
+          _emailController.text = data['email'] ?? '';
+          _phoneController.text = data['phone'] ?? '';
+          _linkedinController.text = data['linkedin'] ?? '';
+          _githubController.text = data['github'] ?? '';
+        });
+      } else {
+        // If no profile exists, use Firebase Auth data
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          setState(() {
+            _nameController.text = user.displayName ?? '';
+            _emailController.text = user.email ?? '';
+          });
+        }
+      }
+    } catch (e) {
+      // Handle error silently, user can still fill the form manually
     }
   }
 
@@ -79,6 +116,9 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
         _nameController.clear();
         _emailController.clear();
         _phoneController.clear();
+        _locationController.clear();
+        _linkedinController.clear();
+        _githubController.clear();
         _summaryController.clear();
         _skillsController.clear();
 
@@ -89,6 +129,8 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
           _emailController.text = contact['email']?.toString() ?? '';
           _phoneController.text = contact['phone']?.toString() ?? '';
           _locationController.text = contact['location']?.toString() ?? '';
+          _linkedinController.text = contact['linkedin']?.toString() ?? '';
+          _githubController.text = contact['github']?.toString() ?? '';
         }
 
         // Populate other fields
@@ -197,6 +239,8 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
           'email': _emailController.text,
           'phone': _phoneController.text,
           'location': _locationController.text,
+          'linkedin': _linkedinController.text,
+          'github': _githubController.text,
         },
         'summary': _summaryController.text,
         'skills': _skillsController.text
@@ -253,6 +297,8 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
     _emailController.dispose();
     _phoneController.dispose();
     _locationController.dispose();
+    _linkedinController.dispose();
+    _githubController.dispose();
     _summaryController.dispose();
     _skillsController.dispose();
     _pageController.dispose();
@@ -580,6 +626,28 @@ class _ResumeFormScreenState extends State<ResumeFormScreen> {
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.location_on),
             ),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _linkedinController,
+            decoration: const InputDecoration(
+              labelText: 'LinkedIn Profile URL',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.link),
+              hintText: 'https://linkedin.com/in/yourprofile',
+            ),
+            keyboardType: TextInputType.url,
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _githubController,
+            decoration: const InputDecoration(
+              labelText: 'GitHub Profile URL',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.code),
+              hintText: 'https://github.com/yourusername',
+            ),
+            keyboardType: TextInputType.url,
           ),
         ],
       ),

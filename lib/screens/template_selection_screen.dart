@@ -5,11 +5,9 @@ class TemplateSelectionScreen extends StatelessWidget {
   const TemplateSelectionScreen({super.key});
 
   void _selectTemplate(BuildContext context, String templateKey) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => ResumeFormScreen(templateKey: templateKey),
-      ),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (context) => ResumeFormScreen()));
   }
 
   @override
